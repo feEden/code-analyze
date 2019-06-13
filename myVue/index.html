@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+
+<head></head>
+<meta charset="utf-8"/>
+<body>
+  <div id="app">
+   <!--  <input type="text" id="a" v-model="name"> -->
+  </div>
+  <script>
+    window.batcher = "";
+  </script>
+  <script src="src/Batcher.js"></script>
+  <script src="src/Dep.js"></script>
+  <script src="src/Observe.js"></script>
+  <script src="src/Watcher.js"></script>
+  <script src="src/Compile.js"></script>
+  <script src="src/MVVM.js"></script>
+  <script>
+    var vm = new Vue({
+      el: 'app',
+      data: {
+        name: ''
+      }
+    });
+
+    //循环一百次，只更新两次dom.因为最终只需要显示最终的结果就行了。所以这里并不会产生新的观察者对象(只在模板解析产生)，
+    //直接将内存中vm上name的属性值修改了就行
+    // 同步任务执行完毕，开始执行异步队列中的任务，将最新的值替换dom值
+    for(var i=0;i<100;i++){
+      vm["name"] = i;
+    }
+  </script>
+</body>
+
+</html>

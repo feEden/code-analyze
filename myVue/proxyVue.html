@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>proxyVue</title>
+    <style>
+        #app {
+            margin: 100px auto 0 auto;
+            width: 300px;
+        }
+        
+        #btn {
+            margin: 10px auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <input type="text" v-model="num" />
+        <input id="btn" type="button" value="添加到Todolist" v-click="addList" /><br />
+        <span>您输入的是：</span><span v-bind="num"></span>
+        <ul id="list"></ul>
+    </div>
+</body>
+
+<script>
+    // 使用代理对象贯穿整个流程
+    class proxyVue {
+        constructor(options) {
+            this.$options = options || {};
+            // 操作方法
+            this.$methods = this._methods = this.$options.methods;
+
+            // 代理对象
+            const data = (this._data = this.$options.data);
+
+            // 管理订阅属性的观察者
+            this.subscribe = {};
+
+            // 数据绑定 get set 拦截操作
+            this.observe(data);
+
+            // 编译模板 处理指令 分析出需要观察的对象
+            this.compile(options.el);
+        }
+
+        // 观察者模式的订阅
+        publish(watcher) {
+            if (!this.subscribe[watcher.property])
+                this.subscribe[watcher.property] = [];
+            this.subscribe[watcher.property].push(watcher);
+        }
+        observe(data) {
+            const that = this;
+            // 给主题对象设置代理，拦截默认操作
+            let handler = {
+                get(target, property) {
+                    return target[property];
+                },
+                set(target, property, value) {
+                    //完成默认的赋值操作
+                    let res = Reflect.set(target, property, value);
+                    // 通知订阅该属性的观察者
+                    that.subscribe[property].map(item => {
+                        item.update();
+                    });
+                    return res;
+                }
+            };
+            this.$data = new Proxy(data, handler);
+        }
+        compile(el) {
+            // 得到父节点下的所有子节点
+            const nodes = Array.prototype.slice.call(
+                document.querySelector(el).children
+            );
+            let data = this.$data;
+            nodes.map(node => {
+                // 节点下有子节点，循环编译 找到所有需要观察的属性
+                if (node.children.length > 0) this._complie(node);
+                if (node.hasAttribute("v-bind")) {
+                    let property = node.getAttribute("v-bind");
+                    // 将该属性的观察者添加到管理订阅属性的数组中，方便通知
+                    this.publish(new Watcher(node, "innerHTML", data, property));
+                }
+                if (node.hasAttribute("v-model")) {
+                    let property = node.getAttribute("v-model");
+                    this.publish(new Watcher(node, "value", data, property));
+                    node.addEventListener("input", () => {
+                        data[property] = node.value;
+                    });
+                }
+                if (node.hasAttribute("v-click")) {
+                    let methodName = node.getAttribute("v-click");
+                    // 如果是事件，手动绑定一个click事件，并制定this为代理对象
+                    let mothod = this.$methods[methodName].bind(data);
+                    node.addEventListener("click", mothod);
+                }
+            });
+        }
+    }
+    class Watcher {
+        constructor(node, attr, data, property) {
+            // 节点对象
+            this.node = node;
+            // 节点属性
+            this.attr = attr;
+            // 主题对象的代理
+            this.data = data;
+            // 观察的主题对象的某一个属性
+            this.property = property;
+        }
+        update() {
+            this.node[this.attr] = this.data[this.property];
+        }
+    }
+
+    // 渲染todolist列表
+    const Render = {
+        // 初始化
+        init: function(arr) {
+            // 空的文档片段 append到DOM中去后，里面的内容会形成真正的DOM
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < arr.length; i++) {
+                const li = document.createElement("li");
+                li.textContent = arr[i];
+                fragment.appendChild(li);
+            }
+            list.appendChild(fragment);
+        },
+        addList: function(val) {
+            const li = document.createElement("li");
+            li.textContent = val;
+            list.appendChild(li);
+        }
+    };
+
+    // 实例化一个proxyVue
+    window.onload = function() {
+        let vm = new proxyVue({
+            el: "#app",
+            data: {
+                num: 0,
+                arr: []
+            },
+            methods: {
+                addList() {
+                    this.arr.push(this.num);
+                    Render.addList(this.num);
+                }
+            }
+        });
+    };
+</script>
+
+</html>
